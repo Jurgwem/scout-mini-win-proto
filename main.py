@@ -1,28 +1,70 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
-import can
 import threading
 import queue
 import time
+import os
+import sys
 
+# ---------------------------------------------------------------------------
+# Robust libusb backend setup for Windows
+# Must run BEFORE importing anything that touches pyusb (including python-can)
+# ---------------------------------------------------------------------------
+_backend_ok = False
 try:
-    import usb.core
-    import usb.backend.libusb1
     import libusb_package
 
-    # Explicitly grab the bundled libusb backend
+    # Strategy 1: Tell pyusb which backend library to load via env var
+    _dll_path = str(libusb_package.get_library_path())
+    if _dll_path and os.path.isfile(_dll_path):
+        os.environ["PYUSB_BACKEND"] = _dll_path
+        _dll_dir = os.path.dirname(_dll_path)
+
+        # Strategy 2: Register DLL directory so Windows DLL loader can find it
+        if hasattr(os, "add_dll_directory"):
+            os.add_dll_directory(_dll_dir)
+
+        # Strategy 3: Preload the DLL into the process via ctypes
+        import ctypes
+        try:
+            ctypes.cdll.LoadLibrary(_dll_path)
+        except OSError:
+            ctypes.WinDLL(_dll_path)
+
+    # Strategy 4: Obtain a working backend object and monkey-patch usb.core.find
+    import usb.core
+    import usb.backend.libusb1
     _be = usb.backend.libusb1.get_backend(find_library=libusb_package.find_library)
-    _orig_find = usb.core.find
 
-    # Monkey-patch usb.core.find so gs_usb connects properly on Windows
-    def patched_find(**kwargs):
-        if 'backend' not in kwargs:
-            kwargs['backend'] = _be
-        return _orig_find(**kwargs)
+    if _be is not None:
+        _orig_find = usb.core.find
 
-    usb.core.find = patched_find
+        def _patched_find(*args, **kwargs):
+            if "backend" not in kwargs:
+                kwargs["backend"] = _be
+            return _orig_find(*args, **kwargs)
+
+        usb.core.find = _patched_find
+
+        # Strategy 5: Patch the gs_usb module's own cached reference (if loaded)
+        try:
+            import gs_usb.gs_usb as _gs_mod
+            if hasattr(_gs_mod, "usb"):
+                _gs_mod.usb.core.find = _patched_find
+        except Exception:
+            pass
+
+        _backend_ok = True
+
 except Exception as e:
-    print("Warning: libusb patch failed", e)
+    print(f"Warning: libusb backend setup failed: {e}")
+
+if not _backend_ok:
+    print("WARNING: No libusb backend was loaded. CAN connection will likely fail.")
+    print("         Make sure 'pip install libusb-package' succeeded.")
+
+# Now safe to import python-can (which internally imports gs_usb / pyusb)
+import can
 
 
 class ScoutCANTestApp:
