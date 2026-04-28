@@ -11,39 +11,61 @@ import sys
 # Must run BEFORE importing anything that touches pyusb (including python-can)
 # ---------------------------------------------------------------------------
 _backend_ok = False
-try:
-    import libusb_package
+_dll_path = None
+_script_dir = os.path.dirname(os.path.abspath(__file__))
 
-    # Strategy 1: Tell pyusb which backend library to load via env var
-    _dll_path_raw = libusb_package.get_library_path()
-    _dll_path = str(_dll_path_raw) if _dll_path_raw is not None else None
-    print(f"[DEBUG] libusb DLL path: {_dll_path}")
-    print(f"[DEBUG] DLL exists: {os.path.isfile(_dll_path) if _dll_path else False}")
+# --- Locate the libusb DLL ---
+# Strategy 0: Check for libusb-1.0.dll right next to the script
+_local_dll = os.path.join(_script_dir, "libusb-1.0.dll")
+if os.path.isfile(_local_dll):
+    _dll_path = _local_dll
+    print(f"[DEBUG] Found local DLL: {_dll_path}")
 
-    if _dll_path and os.path.isfile(_dll_path):
-        os.environ["PYUSB_BACKEND"] = _dll_path
-        _dll_dir = os.path.dirname(_dll_path)
+# Strategy 1: Try libusb_package if local DLL not found
+if not _dll_path:
+    try:
+        import libusb_package
+        _raw = libusb_package.get_library_path()
+        if _raw and os.path.isfile(str(_raw)):
+            _dll_path = str(_raw)
+            print(f"[DEBUG] Found DLL via libusb_package: {_dll_path}")
+    except ImportError:
+        print("[DEBUG] libusb_package not installed, skipping")
 
-        # Strategy 2: Register DLL directory so Windows DLL loader can find it
-        if hasattr(os, "add_dll_directory"):
-            os.add_dll_directory(_dll_dir)
-            print(f"[DEBUG] Added DLL directory: {_dll_dir}")
+if not _dll_path:
+    print("[DEBUG] No libusb DLL found anywhere!")
 
-        # Strategy 3: Preload the DLL into the process via ctypes
-        import ctypes
+# --- Load the DLL and set up backend ---
+if _dll_path:
+    import ctypes
+
+    # Register the DLL directory with Windows
+    _dll_dir = os.path.dirname(_dll_path)
+    if hasattr(os, "add_dll_directory"):
+        os.add_dll_directory(_dll_dir)
+
+    # Preload the DLL into the process
+    try:
+        ctypes.cdll.LoadLibrary(_dll_path)
+        print(f"[DEBUG] Preloaded DLL via ctypes")
+    except OSError:
         try:
-            ctypes.cdll.LoadLibrary(_dll_path)
-            print("[DEBUG] Loaded DLL via ctypes.cdll")
-        except OSError:
             ctypes.WinDLL(_dll_path)
-            print("[DEBUG] Loaded DLL via ctypes.WinDLL")
-    else:
-        print("[DEBUG] DLL path missing or file not found, skipping strategies 2-3")
+            print(f"[DEBUG] Preloaded DLL via WinDLL")
+        except OSError as e:
+            print(f"[DEBUG] Failed to preload DLL: {e}")
 
-    # Strategy 4: Obtain a working backend object and monkey-patch usb.core.find
+    os.environ["PYUSB_BACKEND"] = _dll_path
+
+try:
     import usb.core
     import usb.backend.libusb1
-    _be = usb.backend.libusb1.get_backend(find_library=libusb_package.find_library)
+
+    # Build a find_library function that always returns our known DLL path
+    def _custom_find_library(candidate):
+        return _dll_path
+
+    _be = usb.backend.libusb1.get_backend(find_library=_custom_find_library if _dll_path else None)
     print(f"[DEBUG] libusb1 backend object: {_be}")
 
     if _be is not None:
@@ -56,7 +78,7 @@ try:
 
         usb.core.find = _patched_find
 
-        # Strategy 5: Patch the gs_usb module's own cached reference (if loaded)
+        # Patch gs_usb module's own cached reference
         try:
             import gs_usb.gs_usb as _gs_mod
             if hasattr(_gs_mod, "usb"):
@@ -68,7 +90,7 @@ try:
         _backend_ok = True
         print("[DEBUG] Backend setup SUCCESS")
     else:
-        print("[DEBUG] get_backend() returned None — libusb DLL may not be loadable")
+        print("[DEBUG] get_backend() returned None")
 
 except Exception as e:
     import traceback
@@ -77,7 +99,7 @@ except Exception as e:
 
 if not _backend_ok:
     print("WARNING: No libusb backend was loaded. CAN connection will likely fail.")
-    print("         Make sure 'pip install libusb-package' succeeded.")
+    print("         Make sure 'libusb-1.0.dll' is in the script folder or run 'pip install libusb-package'.")
 
 # Now safe to import python-can (which internally imports gs_usb / pyusb)
 import can
