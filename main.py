@@ -15,7 +15,11 @@ try:
     import libusb_package
 
     # Strategy 1: Tell pyusb which backend library to load via env var
-    _dll_path = str(libusb_package.get_library_path())
+    _dll_path_raw = libusb_package.get_library_path()
+    _dll_path = str(_dll_path_raw) if _dll_path_raw is not None else None
+    print(f"[DEBUG] libusb DLL path: {_dll_path}")
+    print(f"[DEBUG] DLL exists: {os.path.isfile(_dll_path) if _dll_path else False}")
+
     if _dll_path and os.path.isfile(_dll_path):
         os.environ["PYUSB_BACKEND"] = _dll_path
         _dll_dir = os.path.dirname(_dll_path)
@@ -23,18 +27,24 @@ try:
         # Strategy 2: Register DLL directory so Windows DLL loader can find it
         if hasattr(os, "add_dll_directory"):
             os.add_dll_directory(_dll_dir)
+            print(f"[DEBUG] Added DLL directory: {_dll_dir}")
 
         # Strategy 3: Preload the DLL into the process via ctypes
         import ctypes
         try:
             ctypes.cdll.LoadLibrary(_dll_path)
+            print("[DEBUG] Loaded DLL via ctypes.cdll")
         except OSError:
             ctypes.WinDLL(_dll_path)
+            print("[DEBUG] Loaded DLL via ctypes.WinDLL")
+    else:
+        print("[DEBUG] DLL path missing or file not found, skipping strategies 2-3")
 
     # Strategy 4: Obtain a working backend object and monkey-patch usb.core.find
     import usb.core
     import usb.backend.libusb1
     _be = usb.backend.libusb1.get_backend(find_library=libusb_package.find_library)
+    print(f"[DEBUG] libusb1 backend object: {_be}")
 
     if _be is not None:
         _orig_find = usb.core.find
@@ -51,13 +61,19 @@ try:
             import gs_usb.gs_usb as _gs_mod
             if hasattr(_gs_mod, "usb"):
                 _gs_mod.usb.core.find = _patched_find
+                print("[DEBUG] Patched gs_usb module reference")
         except Exception:
             pass
 
         _backend_ok = True
+        print("[DEBUG] Backend setup SUCCESS")
+    else:
+        print("[DEBUG] get_backend() returned None — libusb DLL may not be loadable")
 
 except Exception as e:
+    import traceback
     print(f"Warning: libusb backend setup failed: {e}")
+    traceback.print_exc()
 
 if not _backend_ok:
     print("WARNING: No libusb backend was loaded. CAN connection will likely fail.")

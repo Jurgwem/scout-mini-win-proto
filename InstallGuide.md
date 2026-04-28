@@ -18,14 +18,29 @@ By default, Windows will assign a generic composite driver to the CANable adapte
 6. Click **Replace Driver** (or Install Driver) and wait for success.
 
 ## 3. Python Environment Setup
-You must have Python 3 installed. This application uses standard `tkinter` for the GUI and relies on `python-can` with a `libusb` backend for hardware communication.
+You must have **Python 3.8+** installed. This application uses standard `tkinter` for the GUI and relies on `python-can` with a `libusb` backend for hardware communication.
+
+> **Important:** On Windows, `python` and `python3` may point to different installations.
+> Always use the **same command** for both installing packages and running the app.
 
 1. Open a terminal (PowerShell or Command Prompt) in the project folder.
-2. Install the required dependencies using pip:
+2. First, check which Python you are using:
    ```powershell
-   pip install -r requirements.txt
+   python --version
    ```
-   *(Note: This automatically handles installing `python-can`, `gs_usb`, and crucially the `libusb` bundled backend needed for modern Windows security bypasses).*
+   If this doesn't work, try `python3 --version` instead. Use whichever works for **all** commands below.
+
+3. Install the required dependencies:
+   ```powershell
+   python -m pip install -r requirements.txt
+   ```
+   *(Using `python -m pip` guarantees the packages install into the correct Python. Do **not** use bare `pip` as it may point to a different installation.)*
+
+4. Verify the install succeeded:
+   ```powershell
+   python -c "import can; import libusb_package; print('All dependencies OK')"
+   ```
+   You should see `All dependencies OK`. If any `ModuleNotFoundError` appears, re-run step 3.
 
 ## 4. Running the Application
 1. In the terminal, execute the script:
@@ -35,3 +50,12 @@ You must have Python 3 installed. This application uses standard `tkinter` for t
 2. The GUI will appear. The default interface is already set to `gs_usb` at `500000` bps (500 kbps), which is the factory standard for the Scout Mini.
 3. Click **Connect**.
 4. You can use the **Dashboard** to view live RPM data, the **Telemetry Toggle** to declutter the feed, and the **WASD Controller** to physically drive the robot.
+
+## Troubleshooting
+
+| Symptom | Fix |
+|---|---|
+| `No module named 'can'` or `'libusb_package'` | Packages installed under a different Python. Re-run `python -m pip install -r requirements.txt` using the **same** `python` command you use to launch the app. |
+| `No backend available` | Zadig driver not installed, or wrong interface selected. Redo Step 2. |
+| App connects but no CAN data appears | Scout Mini is off, or CAN H/L wires are swapped. Check wiring. |
+| `GsUsbBus was not properly shut down` | Cosmetic warning on exit, safe to ignore. |
