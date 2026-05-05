@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scout Mini Control Panel</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <!-- Use Inter font -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Scout Mini Control Panel</h1>
+            <div id="status-indicator" class="status-disconnected">Disconnected</div>
+        </header>
+
+        <main>
+            <section class="panel connection-panel">
+                <h2>Connection</h2>
+                <div class="input-group">
+                    <label>Interface:</label>
+                    <input type="text" id="interface" value="gs_usb">
+                </div>
+                <div class="input-group">
+                    <label>Channel/Port:</label>
+                    <input type="text" id="channel" value="0">
+                </div>
+                <div class="input-group">
+                    <label>Bitrate:</label>
+                    <input type="text" id="bitrate" value="500000">
+                </div>
+                <div class="button-group">
+                    <button id="btn-connect" class="primary">Connect</button>
+                    <button id="btn-disconnect" class="danger" disabled>Disconnect</button>
+                </div>
+            </section>
+
+            <section class="panel telemetry-panel">
+                <h2>Telemetry (RPM)</h2>
+                <div class="gauges">
+                    <div class="gauge">
+                        <span class="label">Front Right</span>
+                        <span class="value" id="rpm-593">0</span>
+                    </div>
+                    <div class="gauge">
+                        <span class="label">Front Left</span>
+                        <span class="value" id="rpm-594">0</span>
+                    </div>
+                    <div class="gauge">
+                        <span class="label">Rear Right</span>
+                        <span class="value" id="rpm-595">0</span>
+                    </div>
+                    <div class="gauge">
+                        <span class="label">Rear Left</span>
+                        <span class="value" id="rpm-596">0</span>
+                    </div>
+                </div>
+            </section>
+
+            <section class="panel control-panel">
+                <h2>Control</h2>
+                <div class="control-grid">
+                    <div class="wasd">
+                        <div class="key-row">
+                            <div class="key" id="key-w">W</div>
+                        </div>
+                        <div class="key-row">
+                            <div class="key" id="key-a">A</div>
+                            <div class="key" id="key-s">S</div>
+                            <div class="key" id="key-d">D</div>
+                        </div>
+                    </div>
+                    <div class="settings">
+                        <label>Target RPM: <span id="rpm-target-val">100</span></label>
+                        <input type="range" id="rpm-slider" min="0" max="400" value="100">
+                        <div class="warning">Ensure wheels are suspended!</div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="panel console-panel">
+                <div class="console-header">
+                    <h2>CAN Feed</h2>
+                    <label class="checkbox">
+                        <input type="checkbox" id="filter-telemetry">
+                        Hide System Telemetry
+                    </label>
+                </div>
+                <div class="console-output" id="console"></div>
+            </section>
+        </main>
+    </div>
+    <script src="/static/script.js"></script>
+</body>
+</html>
